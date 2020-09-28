@@ -199,19 +199,19 @@ def fit_model(x_train_img, y_train, batch_size=512, epochs=25, validation_split=
 if __name__ == '__main__':
     logging = get_logger(__name__)
     logging.info('numpy version:{} Tensorflow version::{}'.format(np.__version__, tf.__version__))
-    options = parse_args()
+    args = parse_args()
 
     # Read the first dataset
-    train_df = read_train_data(options.training_dir, options.num_datasets)[0]
-    test_df = read_test_data(options.training_dir, options.num_datasets)[0]
+    train_df = read_train_data(args.training_dir, args.num_datasets)[0]
+    test_df = read_test_data(args.training_dir, args.num_datasets)[0]
     
     # Get the training dataset as an image
-    x_train_img, y_train, x_test_img, y_test = get_dataset(train_df, test_df, options.sequence_length)
+    x_train_img, y_train, x_test_img, y_test = get_dataset(train_df, test_df, args.sequence_length)
     
     model = fit_model(x_train_img, y_train, 
-              batch_size=options.batch_size, 
-              epochs=options.epochs, 
-              validation_split=options.validation_split,
-              patience=options.patience)
+              batch_size=args.batch_size, 
+              epochs=args.epochs, 
+              validation_split=args.validation_split,
+              patience=args.patience)
     
-    model.save(os.path.join(args.model_dir, '000000001'), 'ae_model.h5')
+    model.save(os.path.join(args.model_dir, '000000001'))
