@@ -29,7 +29,9 @@ def get_logger(name):
 def parse_args():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--model_dir', type=str, default=os.environ['SM_MODEL_DIR'])
+    # model_dir is always passed in from SageMaker. By default this is a S3 path under the default bucket.
+    parser.add_argument('--model_dir', type=str)
+    parser.add_argument('--sm-model-dir', type=str, default=os.environ.get('SM_MODEL_DIR'))
     parser.add_argument('--training_dir', type=str, default=os.environ['SM_CHANNEL_TRAIN'])
     parser.add_argument('--num_datasets', type=int, default=1)
     parser.add_argument('--batch_size', type=int, default=512)
@@ -214,4 +216,5 @@ if __name__ == '__main__':
               validation_split=args.validation_split,
               patience=args.patience)
     
-    model.save(os.path.join(args.model_dir, '000000001'))
+    logging.info('saving model to: {}...'.format(args.model_dir))
+    model.save(os.path.join(args.sm_model_dir, '000000001'))
