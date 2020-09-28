@@ -1,7 +1,10 @@
+# Autoencoder based on: https://towardsdatascience.com/predictive-maintenance-of-turbofan-engine-64911e39c367
+
+import argparse
 import pandas as pd
 import numpy as np
 import itertools
-#import matplotlib.pyplot as plt
+import logging
 import random
 import os
 
@@ -26,15 +29,14 @@ def get_logger(name):
 def parse_args():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--num-gpus', type=int, default=1)
-    parser.add_argument('--training-dir', type=str, default=os.environ['SM_CHANNEL_TRAIN'])
-    parser.add_argument('--num-datasets', type=int, default=1)
-    parser.add_argument('--batch-size', type=int, default=512)
+    parser.add_argument('--model_dir', type=str, default=os.environ['SM_MODEL_DIR'])
+    parser.add_argument('--training_dir', type=str, default=os.environ['SM_CHANNEL_TRAIN'])
+    parser.add_argument('--num_datasets', type=int, default=1)
+    parser.add_argument('--batch_size', type=int, default=512)
     parser.add_argument('--epochs', type=int, default=25)
-    parser.add_argument('--sequence-length', type=int, default=50) # AE
-    parser.add_argument('--validation-split', type=float, default=0.2) # AE
+    parser.add_argument('--sequence_length', type=int, default=50) # AE
+    parser.add_argument('--validation_split', type=float, default=0.2) # AE
     parser.add_argument('--patience', type=int, default=6) # AE
-    parser.add_argument('--model-dir', type=str, default=os.environ['SM_MODEL_DIR'])
 
     return parser.parse_args()
 
@@ -77,6 +79,25 @@ def rec_plot(s, eps=0.10, steps=10):
     return Z
 
 def get_dataset(train_df, test_df, sequence_length):
+    # NOTE: Skipping processing besides labels which are included in this page
+    # see: https://github.com/awslabs/predictive-maintenance-using-machine-learning/blob/master/source/notebooks/sagemaker_predictive_maintenance/preprocess.py
+
+    ### ADD NEW LABEL TRAIN ###
+    w1 = 45
+    w0 = 15
+    train_df['label1'] = np.where(train_df['RUL'] <= w1, 1, 0 )
+    train_df['label2'] = train_df['label1']
+    train_df.loc[train_df['RUL'] <= w0, 'label2'] = 2
+
+    ### ADD NEW LABEL TEST ###
+    test_df['label1'] = np.where(test_df['RUL'] <= w1, 1, 0 )
+    test_df['label2'] = test_df['label1']
+    test_df.loc[test_df['RUL'] <= w0, 'label2'] = 2
+
+    ### DROP NA DATA ###
+    train_df = train_df.dropna(axis=1)
+    test_df = test_df.dropna(axis=1)
+
     ### SEQUENCE COL: COLUMNS TO CONSIDER ###
     sequence_cols = []
     for col in train_df.columns:
@@ -119,10 +140,10 @@ def get_dataset(train_df, test_df, sequence_length):
         
     ### TRANSFORM X TRAIN TEST IN IMAGES ###
     x_train_img = np.apply_along_axis(rec_plot, 1, x_train).astype('float16')
-    logging.info("x_train_image shape: ".format(x_train_img.shape))
+    logging.info("x_train_image shape: {}".format(x_train_img.shape))
 
     x_test_img = np.apply_along_axis(rec_plot, 1, x_test).astype('float16')
-    logging.info("x_test_image shape: ".format(x_test_img.shape))f
+    logging.info("x_test_image shape: {}".format(x_test_img.shape))
 
     return x_train_img, y_train, x_test_img, y_test
 
@@ -151,7 +172,6 @@ def fit_model(x_train_img, y_train, batch_size=512, epochs=25, validation_split=
     
     ### FIT ###
     tf.random.set_seed(33)
-    os.environ['PYTHONHASHSEED'] = str(33)
     np.random.seed(33)
     random.seed(33)
 
@@ -181,13 +201,12 @@ if __name__ == '__main__':
     logging.info('numpy version:{} Tensorflow version::{}'.format(np.__version__, tf.__version__))
     options = parse_args()
 
-    ctx = mx.gpu() if options.num_gpus > 0 else mx.cpu()
-
     # Read the first dataset
     train_df = read_train_data(options.training_dir, options.num_datasets)[0]
-    test_df = read_test_data(options.training_dir, options.num_datasets)[1]
+    test_df = read_test_data(options.training_dir, options.num_datasets)[0]
     
-    x_train_img, x_test_img, y_train, y_test = get_dataset(train_df, test_df, options.sequence_length)
+    # Get the training dataset as an image
+    x_train_img, y_train, x_test_img, y_test = get_dataset(train_df, test_df, options.sequence_length)
     
     model = fit_model(x_train_img, y_train, 
               batch_size=options.batch_size, 
@@ -195,4 +214,4 @@ if __name__ == '__main__':
               validation_split=options.validation_split,
               patience=options.patience)
     
-    save(os.path.join(args.model_dir, '000000001'), 'ae_model.h5')
+    model.save(os.path.join(args.model_dir, '000000001'), 'ae_model.h5')
